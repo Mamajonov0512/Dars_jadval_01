@@ -80,15 +80,17 @@ async def process_excel(message: Message, session: dict):
 async def confirm_import(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
         return await callback.answer("Ruxsat yo‘q", show_alert=True)
+    await callback.answer("Import boshlandi. Biroz kuting…")
     stage_id = int(callback.data.split(":")[1])
     try:
         outcome = await activate_staged_import(stage_id, callback.from_user.id)
-    except Exception:
-        return await callback.answer("Import bajarilmadi; avvalgi faol jadval saqlanib qoldi.", show_alert=True)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).exception("Jadval importini faollashtirishda xatolik: %s", type(exc).__name__)
+        return await callback.message.edit_text("❌ Import bajarilmadi. Avvalgi jadval saqlanib qoldi. Xatolikni administrator tekshirishi kerak.")
     if not outcome:
-        return await callback.answer("Import topilmadi yoki u allaqachon ishlatilgan.", show_alert=True)
+        return await callback.message.edit_text("Import topilmadi yoki u allaqachon ishlatilgan. Faylni qayta yuborib ko‘ring.")
     await callback.message.edit_text(f"✅ Import yakunlandi. Kiritildi: {outcome['imported']} | Rad etildi: {outcome['rejected']} | Takroriy: {outcome['duplicates']}\nFaol davr: {outcome['year']}-{outcome['month']:02d}.")
-    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("import_no:"))

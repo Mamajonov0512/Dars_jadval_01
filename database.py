@@ -112,9 +112,15 @@ async def _replace_period_transaction(year: int, month: int, rows: list[dict[str
             VALUES($1,$2,$3,$4,$5,'processing',$6,0,$7,$8) RETURNING id""", filename, admin_id, import_type, year, month, len(rows), error_rows, duplicate_rows)
         period = await conn.fetchrow("""INSERT INTO schedule_periods(year,month,status,source_filename,uploaded_by)
             VALUES($1,$2,'draft',$3,$4) RETURNING id""", year, month, filename, admin_id)
-        for r in rows:
-            await conn.execute("""INSERT INTO schedules(period_id,teacher,group_name,day_of_week,day_index,lesson_date,pair_number,time_range,subject,lesson_type,room,status)
-                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)""", period['id'], r['teacher'], r['group_name'], r['day_of_week'], r['day_index'], r.get('lesson_date'), r.get('pair_number'), r['time_range'], r['subject'], r['lesson_type'], r['room'], r.get('status','scheduled'))
+        if rows:
+            records = [(period['id'], r['teacher'], r['group_name'], r['day_of_week'], r['day_index'],
+                        r.get('lesson_date'), r.get('pair_number'), r['time_range'], r['subject'],
+                        r['lesson_type'], r['room'], r.get('status', 'scheduled')) for r in rows]
+            await conn.copy_records_to_table(
+                'schedules', schema_name='public',
+                columns=('period_id', 'teacher', 'group_name', 'day_of_week', 'day_index',
+                         'lesson_date', 'pair_number', 'time_range', 'subject', 'lesson_type', 'room', 'status'),
+                records=records)
         await conn.execute("UPDATE schedule_periods SET status='archived' WHERE year=$1 AND month=$2 AND status='active'", year, month)
         await conn.execute("UPDATE schedule_periods SET status='active',activated_at=now() WHERE id=$1", period['id'])
         await conn.execute("UPDATE schedule_imports SET status='completed',success_rows=$2 WHERE id=$1", imp['id'], len(rows))
