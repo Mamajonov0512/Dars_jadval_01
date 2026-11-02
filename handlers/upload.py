@@ -21,7 +21,9 @@ def is_admin(user_id: int) -> bool:
 async def begin_import(message: Message):
     if not is_admin(message.from_user.id):
         return await message.answer("Bu amal faqat administratorlar uchun.")
-    match = re.fullmatch(r"/(import|import_weekly)(?:@\w+)?\s+(\d{4})-(\d{1,2})", message.text or "")
+    # Telegram places a command sent with an attached document in `caption`.
+    command_text = message.text or message.caption or ""
+    match = re.fullmatch(r"/(import|import_weekly)(?:@\w+)?\s+(\d{4})-(\d{1,2})", command_text.strip())
     if not match:
         return await message.answer("Format: /import 2026-11\nTakroriy haftalik jadval uchun: /import_weekly 2026-11")
     year, month = int(match.group(2)), int(match.group(3))
@@ -29,6 +31,8 @@ async def begin_import(message: Message):
         return await message.answer("Yil 2000–2100, oy 1–12 oralig‘ida bo‘lishi kerak.")
     import_type = "weekly" if match.group(1) == "import_weekly" else "monthly"
     await database.save_import_session(message.from_user.id, year, month, import_type)
+    if message.document:
+        return await process_excel(message, {"year": year, "month": month, "import_type": import_type})
     await message.answer(f"{year}-yil {month}-oy uchun .xlsx fayl yuboring. Fayl hajmi {get_settings().max_upload_mb} MB gacha.")
 
 
@@ -39,6 +43,10 @@ async def receive_excel(message: Message):
     session = await database.get_import_session(message.from_user.id)
     if not session:
         return await message.answer("Avval davrni belgilang: /import 2026-11")
+    await process_excel(message, session)
+
+
+async def process_excel(message: Message, session: dict):
     doc = message.document
     if not doc.file_name or not doc.file_name.lower().endswith(".xlsx"):
         return await message.answer("Faqat .xlsx fayli qabul qilinadi. .xls qo‘llab-quvvatlanmaydi.")
