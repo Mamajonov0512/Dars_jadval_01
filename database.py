@@ -16,7 +16,10 @@ async def get_pool() -> asyncpg.Pool:
         dsn = get_settings().database_url
         if not dsn:
             raise RuntimeError("DATABASE_URL belgilanmagan")
+        # Supabase transaction poolers use PgBouncer, which cannot safely keep
+        # asyncpg's named prepared statements across pooled transactions.
         _pool = await asyncpg.create_pool(dsn, min_size=1, max_size=5, command_timeout=20,
+                                          statement_cache_size=0,
                                           max_inactive_connection_lifetime=30)
     return _pool
 
