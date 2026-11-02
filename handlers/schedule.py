@@ -40,7 +40,7 @@ def page_text(value, rows, offset, scope, kind):
         d = r["display_date"]
         label = f"❌ Bekor qilingan: {r['subject']}" if r["status"] == "cancelled" else r["subject"]
         lines.append(f"📆 {d:%d.%m.%Y} | {UZ[d.weekday()]}\n"
-                     f"🕘 {r['pair_number'] or '—'}-DARS | {r['time_range']}\n"
+                     f"🕘 {r['pair_number'] or '—'}-Juftlik | {r['time_range']}\n"
                      f"📚 {label} | {r['lesson_type']}\n"
                      f"👥 Guruh: {r['group_name']}\n"
                      f"📍 Xona: {r['room']}")
