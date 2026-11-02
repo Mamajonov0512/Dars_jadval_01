@@ -6,6 +6,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 
 from config import get_settings
 from services import schedule_service
+import database
 
 router = Router()
 UZ = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"]
@@ -26,15 +27,29 @@ async def render(message: Message, start, end, year=None, month=None, user_id=No
         return await message.answer("Avval o‘qituvchi yoki guruhni tanlang.")
     if not rows:
         return await message.answer("Tanlangan davr uchun dars jadvali topilmadi.")
-    await send_page(message, value, rows, scope, key, 0)
+    kind, _, _ = await database.get_selection(uid)
+    await send_page(message, value, rows, scope, key, 0, kind=kind)
 
 
-def page_text(value, rows, offset):
-    lines = [f"📚 {value} · {offset + 1}–{min(offset + 8, len(rows))}/{len(rows)}"]
+def page_text(value, rows, offset, scope, kind):
+    title = {"day": "📅 BUGUNGI DARSLAR", "week": "🗓 HAFTALIK DARSLAR",
+             "month": "📆 OYLIK DARSLAR"}.get(scope, "📚 DARSLAR")
+    who = f"👨‍🏫 {value}" if kind == "teacher" else f"👥 Guruh: {value}"
+    lines = [f"{title} {who}", "━━━━━━━━━━━━━━━━━━"]
     for r in rows[offset:offset + 8]:
         d = r["display_date"]
         label = f"❌ Bekor qilingan: {r['subject']}" if r["status"] == "cancelled" else r["subject"]
-        lines.append(f"\n{d:%d.%m.%Y} — {UZ[d.weekday()]} | {r['pair_number'] or '—'}-juftlik ({r['time_range']})\n{label} · {r['lesson_type']}\nGuruh: {r['group_name']} · Xona: {r['room']}\nO‘qituvchi: {r['teacher']}")
+        lines.append(f"📆 {d:%d.%m.%Y} | {UZ[d.weekday()]}\n"
+                     f"🕘 {r['pair_number'] or '—'}-DARS | {r['time_range']}\n"
+                     f"📚 {label} | {r['lesson_type']}\n"
+                     f"👥 Guruh: {r['group_name']}\n"
+                     f"📍 Xona: {r['room']}")
+        if kind != "teacher":
+            lines.append(f"👨‍🏫 O‘qituvchi: {r['teacher']}")
+        lines.append("━━━━━━━━━━━━━━━━━━")
+    lines.append(f"📊 Jami darslar: {len(rows)} ta")
+    if offset > 0 or offset + 8 < len(rows):
+        lines.append(f"📄 Ko‘rsatilmoqda: {offset + 1}–{min(offset + 8, len(rows))}/{len(rows)}")
     return "\n".join(lines)
 
 
@@ -47,8 +62,8 @@ def page_keyboard(scope, key, offset, total):
     return InlineKeyboardMarkup(inline_keyboard=[buttons]) if buttons else None
 
 
-async def send_page(message, value, rows, scope, key, offset, edit=False):
-    text = page_text(value, rows, offset)
+async def send_page(message, value, rows, scope, key, offset, edit=False, kind=None):
+    text = page_text(value, rows, offset, scope, kind)
     markup = page_keyboard(scope, key, offset, len(rows))
     if edit:
         await message.edit_text(text, reply_markup=markup)
@@ -72,7 +87,9 @@ async def paginate(callback: CallbackQuery):
     if not value or not rows:
         await callback.answer("Jadval topilmadi", show_alert=True)
         return
-    await send_page(callback.message, value, rows, scope, key, min(offset, max(0, len(rows)-1)), edit=True)
+    kind, _, _ = await database.get_selection(callback.from_user.id)
+    await send_page(callback.message, value, rows, scope, key,
+                    min(offset, max(0, len(rows)-1)), edit=True, kind=kind)
     await callback.answer()
 
 
