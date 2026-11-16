@@ -6,6 +6,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 
 import database
 from config import get_settings
+from .schedule import show_tomorrow_all
 
 router = Router()
 
@@ -20,6 +21,7 @@ async def admin_menu(message: Message):
         return await message.answer("Bu bo‘lim faqat administratorlar uchun.")
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📥 Oylik Excel import", callback_data="admin:import")],
+        [InlineKeyboardButton(text="📆 Ertangi barcha darslar", callback_data="admin:tomorrow")],
         [InlineKeyboardButton(text="🗂 Jadval tarixi", callback_data="admin:history"), InlineKeyboardButton(text="📊 Statistika", callback_data="admin:stats")],
     ])
     await message.answer("Administrator boshqaruvi", reply_markup=keyboard)
@@ -32,6 +34,10 @@ async def admin_action(callback: CallbackQuery):
     action = callback.data.split(":", 1)[1]
     if action == "import":
         await callback.message.answer("Davrni tanlab yuboring: /import 2026-11\nTakroriy haftalik jadval: /import_weekly 2026-11")
+    elif action == "tomorrow":
+        await callback.answer("Ertangi jadval tayyorlanmoqda…")
+        await show_tomorrow_all(callback.message)
+        return
     elif action == "history":
         await show_history(callback.message)
     elif action == "stats":

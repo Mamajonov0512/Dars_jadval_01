@@ -36,26 +36,39 @@ async def render(message: Message, start, end, year=None, month=None, user_id=No
 
 def page_text(value, rows, offset, scope, kind):
     title = {"day": "📅 BUGUNGI DARSLAR", "week": "🗓 HAFTALIK DARSLAR",
-             "three": "📆 3 KUNLIK DARSLAR", "month": "📆 OYLIK DARSLAR"}.get(scope, "📚 DARSLAR")
-    who = f"👨‍🏫 {value}" if kind == "teacher" else f"👥 Guruh: {value}"
+             "three": "📆 3 KUNLIK DARSLAR", "month": "📆 OYLIK DARSLAR",
+             "all": "📆 ERTANGI BARCHA DARSLAR"}.get(scope, "📚 DARSLAR")
+    if kind == "teacher":
+        who = f"👨‍🏫 {value}"
+    elif kind == "group":
+        who = f"👥 Guruh: {value}"
+    else:
+        who = "🏫 Barcha guruhlar va o‘qituvchilar"
     lines = [title, who, ""]
     previous_date = None
     for r in rows[offset:offset + 8]:
         d = r["display_date"]
         if d != previous_date:
             if previous_date is not None:
-                lines.extend(["━━━━━━━━━━━━━━━━━━", ""])
+                lines.extend(["━━━━━━━━", ""])
             lines.extend([f"📆 {d:%d.%m.%Y} | {UZ[d.weekday()]}", ""])
             previous_date = d
+        else:
+            lines.append("────────")
         subject_line = f"📚 {r['subject']} | {r['lesson_type']}"
         if r["status"] == "cancelled":
             subject_line += " | Bekor qilingan"
-        if kind != "teacher":
-            subject_line += f" | O‘qituvchi: {r['teacher']}"
+        if kind == "teacher":
+            context_lines = [f"👥 Guruh: {r['group_name']}"]
+        elif kind == "group":
+            context_lines = [f"🎓 O‘qituvchi: {r['teacher']}"]
+        else:
+            context_lines = [f"🎓 O‘qituvchi: {r['teacher']}",
+                             f"👥 Guruh: {r['group_name']}"]
         lines.extend([f"🕘 {r['pair_number'] or '—'}-Juftlik | {r['time_range']}",
+                      *context_lines,
                       subject_line,
-                      f"👥 Guruh: {r['group_name']}",
-                      f"📍 Xona: {r['room']}", ""])
+                      f"📍 Xona: {r['room']}"])
     lines.append(f"📊 Jami darslar: {len(rows)} ta")
     if offset > 0 or offset + 8 < len(rows):
         lines.append(f"📄 Ko‘rsatilmoqda: {offset + 1}–{min(offset + 8, len(rows))}/{len(rows)}")
@@ -84,22 +97,32 @@ async def send_page(message, value, rows, scope, key, offset, edit=False, kind=N
 async def paginate(callback: CallbackQuery):
     _, scope, raw_offset, key = callback.data.split(":", 3)
     offset = int(raw_offset)
-    if scope == "month":
+    if scope == "all":
+        if callback.from_user.id not in get_settings().admin_ids:
+            await callback.answer("Bu ro‘yxat faqat administratorlar uchun.", show_alert=True)
+            return
+        day = datetime.fromisoformat(key).date()
+        value, rows = await schedule_service.all_day_schedule(day)
+        kind = "all"
+    elif scope == "month":
         year, month = (int(x) for x in key.split("-"))
         value, rows = await schedule_service.monthly_schedule(callback.from_user.id, year, month)
+        kind, _, _ = await database.get_selection(callback.from_user.id)
     elif scope == "day":
         day = datetime.fromisoformat(key).date()
         value, rows = await schedule_service.today_schedule(callback.from_user.id, day)
+        kind, _, _ = await database.get_selection(callback.from_user.id)
     elif scope == "three":
         day = datetime.fromisoformat(key).date()
         value, rows = await schedule_service.three_day_schedule(callback.from_user.id, day)
+        kind, _, _ = await database.get_selection(callback.from_user.id)
     else:
         day = datetime.fromisoformat(key).date()
         value, rows = await schedule_service.weekly_schedule(callback.from_user.id, day)
+        kind, _, _ = await database.get_selection(callback.from_user.id)
     if not value or not rows:
         await callback.answer("Jadval topilmadi", show_alert=True)
         return
-    kind, _, _ = await database.get_selection(callback.from_user.id)
     await send_page(callback.message, value, rows, scope, key,
                     min(offset, max(0, len(rows)-1)), edit=True, kind=kind)
     await callback.answer()
@@ -117,6 +140,21 @@ async def three_day(message: Message):
     await render(message, today, today + timedelta(days=2))
 
 
+@router.message(F.text == "📆 Ertangi barcha darslar")
+async def tomorrow_all(message: Message):
+    if message.from_user.id not in get_settings().admin_ids:
+        return await message.answer("Bu ro‘yxat faqat administratorlar uchun.")
+    await show_tomorrow_all(message)
+
+
+async def show_tomorrow_all(message: Message):
+    tomorrow = datetime.now(ZoneInfo(get_settings().timezone)).date() + timedelta(days=1)
+    value, rows = await schedule_service.all_day_schedule(tomorrow)
+    if not rows:
+        return await message.answer("Ertangi kunga dars topilmadi.")
+    await send_page(message, value, rows, "all", tomorrow.isoformat(), 0, kind="all")
+
+
 @router.message(F.text == "🗓 Haftalik jadval")
 async def weekly(message: Message):
     today = datetime.now(ZoneInfo(get_settings().timezone)).date()
@@ -128,4 +166,4 @@ async def weekly(message: Message):
 
 @router.message(F.text == "ℹ️ Yordam")
 async def help_message(message: Message):
-    await message.answer("O‘qituvchi yoki guruhni tanlab, bugungi, haftalik yoki oylik jadvalni ko‘ring. Qidirish uchun nom yuboring. Administratorlar /admin buyrug‘idan foydalanadi.")
+    await message.answer("O‘qituvchi jadvalini tanlab, bugungi, 3 kunlik, haftalik yoki oylik jadvalni ko‘ring. Qidirish uchun nom yuboring. Administratorlar /admin buyrug‘idan foydalanadi.")

@@ -22,6 +22,10 @@ async def three_day_schedule(user_id: int, first_day: date):
     return value, await database.fetch_schedules(kind=kind, value=value, start=first_day, end=last_day)
 
 
+async def all_day_schedule(day: date):
+    return "Barcha darslar", await database.fetch_schedules(start=day, end=day)
+
+
 async def weekly_schedule(user_id: int, day: date):
     monday = day - timedelta(days=day.weekday())
     sunday = monday + timedelta(days=6)

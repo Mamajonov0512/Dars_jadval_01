@@ -9,6 +9,7 @@ router = Router()
 MENU = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text="📚 O‘qituvchi bo‘yicha"), KeyboardButton(text="👥 Guruh bo‘yicha")],
     [KeyboardButton(text="📅 Bugungi darslar"), KeyboardButton(text="📆 3 kunlik jadval")],
+    [KeyboardButton(text="📆 Ertangi barcha darslar")],
     [KeyboardButton(text="🗓 Haftalik jadval"), KeyboardButton(text="📆 Oylik dars jadvali")],
     [KeyboardButton(text="🔎 Qidirish")],
     [KeyboardButton(text="ℹ️ Yordam")],
