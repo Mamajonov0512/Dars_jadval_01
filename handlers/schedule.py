@@ -20,6 +20,9 @@ async def render(message: Message, start, end, year=None, month=None, user_id=No
     elif start == end:
         scope, key = "day", start.isoformat()
         value, rows = await schedule_service.today_schedule(uid, start)
+    elif (end - start).days == 2:
+        scope, key = "three", start.isoformat()
+        value, rows = await schedule_service.three_day_schedule(uid, start)
     else:
         scope, key = "week", start.isoformat()
         value, rows = await schedule_service.weekly_schedule(uid, start)
@@ -33,20 +36,26 @@ async def render(message: Message, start, end, year=None, month=None, user_id=No
 
 def page_text(value, rows, offset, scope, kind):
     title = {"day": "📅 BUGUNGI DARSLAR", "week": "🗓 HAFTALIK DARSLAR",
-             "month": "📆 OYLIK DARSLAR"}.get(scope, "📚 DARSLAR")
+             "three": "📆 3 KUNLIK DARSLAR", "month": "📆 OYLIK DARSLAR"}.get(scope, "📚 DARSLAR")
     who = f"👨‍🏫 {value}" if kind == "teacher" else f"👥 Guruh: {value}"
-    lines = [f"{title} {who}", "━━━━━━━━━━━━━━━━━━"]
+    lines = [title, who, ""]
+    previous_date = None
     for r in rows[offset:offset + 8]:
         d = r["display_date"]
-        label = f"❌ Bekor qilingan: {r['subject']}" if r["status"] == "cancelled" else r["subject"]
-        lines.append(f"📆 {d:%d.%m.%Y} | {UZ[d.weekday()]}\n"
-                     f"🕘 {r['pair_number'] or '—'}-Juftlik | {r['time_range']}\n"
-                     f"📚 {label} | {r['lesson_type']}\n"
-                     f"👥 Guruh: {r['group_name']}\n"
-                     f"📍 Xona: {r['room']}")
+        if d != previous_date:
+            if previous_date is not None:
+                lines.extend(["━━━━━━━━━━━━━━━━━━", ""])
+            lines.extend([f"📆 {d:%d.%m.%Y} | {UZ[d.weekday()]}", ""])
+            previous_date = d
+        subject_line = f"📚 {r['subject']} | {r['lesson_type']}"
+        if r["status"] == "cancelled":
+            subject_line += " | Bekor qilingan"
         if kind != "teacher":
-            lines.append(f"👨‍🏫 O‘qituvchi: {r['teacher']}")
-        lines.append("━━━━━━━━━━━━━━━━━━")
+            subject_line += f" | O‘qituvchi: {r['teacher']}"
+        lines.extend([f"🕘 {r['pair_number'] or '—'}-Juftlik | {r['time_range']}",
+                      subject_line,
+                      f"👥 Guruh: {r['group_name']}",
+                      f"📍 Xona: {r['room']}", ""])
     lines.append(f"📊 Jami darslar: {len(rows)} ta")
     if offset > 0 or offset + 8 < len(rows):
         lines.append(f"📄 Ko‘rsatilmoqda: {offset + 1}–{min(offset + 8, len(rows))}/{len(rows)}")
@@ -81,6 +90,9 @@ async def paginate(callback: CallbackQuery):
     elif scope == "day":
         day = datetime.fromisoformat(key).date()
         value, rows = await schedule_service.today_schedule(callback.from_user.id, day)
+    elif scope == "three":
+        day = datetime.fromisoformat(key).date()
+        value, rows = await schedule_service.three_day_schedule(callback.from_user.id, day)
     else:
         day = datetime.fromisoformat(key).date()
         value, rows = await schedule_service.weekly_schedule(callback.from_user.id, day)
@@ -97,6 +109,12 @@ async def paginate(callback: CallbackQuery):
 async def today(message: Message):
     today = datetime.now(ZoneInfo(get_settings().timezone)).date()
     await render(message, today, today, today.year, today.month)
+
+
+@router.message(F.text == "📆 3 kunlik jadval")
+async def three_day(message: Message):
+    today = datetime.now(ZoneInfo(get_settings().timezone)).date()
+    await render(message, today, today + timedelta(days=2))
 
 
 @router.message(F.text == "🗓 Haftalik jadval")

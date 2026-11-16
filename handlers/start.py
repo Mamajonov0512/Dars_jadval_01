@@ -8,13 +8,15 @@ from config import get_settings
 router = Router()
 MENU = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text="📚 O‘qituvchi bo‘yicha"), KeyboardButton(text="👥 Guruh bo‘yicha")],
-    [KeyboardButton(text="📅 Bugungi darslar"), KeyboardButton(text="🗓 Haftalik jadval")],
-    [KeyboardButton(text="📆 Oylik dars jadvali"), KeyboardButton(text="🔎 Qidirish")],
+    [KeyboardButton(text="📅 Bugungi darslar"), KeyboardButton(text="📆 3 kunlik jadval")],
+    [KeyboardButton(text="🗓 Haftalik jadval"), KeyboardButton(text="📆 Oylik dars jadvali")],
+    [KeyboardButton(text="🔎 Qidirish")],
     [KeyboardButton(text="ℹ️ Yordam")],
 ], resize_keyboard=True)
 TEACHER_MENU = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="📅 Bugungi darslar"), KeyboardButton(text="🗓 Haftalik jadval")],
-    [KeyboardButton(text="📆 Oylik dars jadvali"), KeyboardButton(text="ℹ️ Yordam")],
+    [KeyboardButton(text="📅 Bugungi darslar"), KeyboardButton(text="📆 3 kunlik jadval")],
+    [KeyboardButton(text="🗓 Haftalik jadval"), KeyboardButton(text="📆 Oylik dars jadvali")],
+    [KeyboardButton(text="ℹ️ Yordam")],
 ], resize_keyboard=True)
 
 

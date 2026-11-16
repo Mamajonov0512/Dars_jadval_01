@@ -13,6 +13,15 @@ async def today_schedule(user_id: int, day: date):
                                                 period_year=day.year, period_month=day.month)
 
 
+async def three_day_schedule(user_id: int, first_day: date):
+    last_day = first_day + timedelta(days=2)
+    kind, teacher, group = await database.get_selection(user_id)
+    value = teacher if kind == "teacher" else group
+    if not value:
+        return None, []
+    return value, await database.fetch_schedules(kind=kind, value=value, start=first_day, end=last_day)
+
+
 async def weekly_schedule(user_id: int, day: date):
     monday = day - timedelta(days=day.weekday())
     sunday = monday + timedelta(days=6)
