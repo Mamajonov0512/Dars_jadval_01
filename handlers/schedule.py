@@ -128,9 +128,89 @@ async def paginate(callback: CallbackQuery):
     await callback.answer()
 
 
+def group_day_rows(rows):
+    groups = {}
+    for row in rows:
+        pairs = groups.setdefault(row["group_name"], {})
+        pair = row["pair_number"] or 0
+        pairs.setdefault(pair, []).append(row)
+    result = []
+    for group_name in sorted(groups):
+        pair_rows = []
+        for pair in sorted(groups[group_name]):
+            teachers = []
+            for row in groups[group_name][pair]:
+                teacher = row["teacher"]
+                if row["status"] == "cancelled":
+                    teacher += " (bekor qilingan)"
+                if teacher not in teachers:
+                    teachers.append(teacher)
+            pair_rows.append((pair, ", ".join(teachers)))
+        result.append((group_name, pair_rows))
+    return result
+
+
+def admin_today_text(day, groups, offset):
+    lines = ["📅 BUGUNGI DARSLAR", f"📆 {day:%d.%m.%Y} | {UZ[day.weekday()]}", ""]
+    page_groups = groups[offset:offset + 6]
+    for index, (group_name, pairs) in enumerate(page_groups):
+        if index:
+            lines.extend(["────────", ""])
+        lines.append(f"👥 {group_name}")
+        for pair, teachers in pairs:
+            label = f"{pair}-Juftlik" if pair else "Juftlik belgilanmagan"
+            lines.append(f"{label}: {teachers}")
+    lines.append("")
+    lines.append(f"📊 Guruhlar: {len(groups)} ta")
+    if offset > 0 or offset + 6 < len(groups):
+        lines.append(f"📄 Ko‘rsatilmoqda: {offset + 1}–{min(offset + 6, len(groups))}/{len(groups)}")
+    return "\n".join(lines)
+
+
+def admin_today_keyboard(day, offset, total):
+    buttons = []
+    if offset > 0:
+        buttons.append(InlineKeyboardButton(
+            text="⬅️ Oldingi", callback_data=f"admin_today:{max(0, offset - 6)}:{day.isoformat()}"))
+    if offset + 6 < total:
+        buttons.append(InlineKeyboardButton(
+            text="Keyingi ➡️", callback_data=f"admin_today:{offset + 6}:{day.isoformat()}"))
+    return InlineKeyboardMarkup(inline_keyboard=[buttons]) if buttons else None
+
+
+async def send_admin_today(message, day, groups, offset=0, edit=False):
+    text = admin_today_text(day, groups, offset)
+    markup = admin_today_keyboard(day, offset, len(groups))
+    if edit:
+        await message.edit_text(text, reply_markup=markup)
+    else:
+        await message.answer(text, reply_markup=markup)
+
+
+@router.callback_query(F.data.startswith("admin_today:"))
+async def paginate_admin_today(callback: CallbackQuery):
+    if callback.from_user.id not in get_settings().admin_ids:
+        await callback.answer("Bu ro‘yxat faqat administratorlar uchun.", show_alert=True)
+        return
+    await callback.answer()
+    _, raw_offset, raw_day = callback.data.split(":", 2)
+    day = datetime.fromisoformat(raw_day).date()
+    _, rows = await schedule_service.all_day_schedule(day)
+    if not rows:
+        return await callback.message.edit_text("Bugungi kunga dars topilmadi.")
+    groups = group_day_rows(rows)
+    offset = min(int(raw_offset), max(0, len(groups) - 1))
+    await send_admin_today(callback.message, day, groups, offset, edit=True)
+
+
 @router.message(F.text == "📅 Bugungi darslar")
 async def today(message: Message):
     today = datetime.now(ZoneInfo(get_settings().timezone)).date()
+    if message.from_user.id in get_settings().admin_ids:
+        _, rows = await schedule_service.all_day_schedule(today)
+        if not rows:
+            return await message.answer("Bugungi kunga dars topilmadi.")
+        return await send_admin_today(message, today, group_day_rows(rows))
     await render(message, today, today, today.year, today.month)
 
 
